@@ -29,7 +29,12 @@
 	float lastFrameTime;
 	UIImage *currentImage;
 	double duration;
-    BOOL frameReady;	
+    BOOL frameReady;
+    BOOL disposed;
+    
+    NSTimer *cgTimer;
+    NSTimer *pvTimer;
+    NSTimer *cmTimer;
 }
 
 - (BOOL)decodeFrame:(NSData*)frameData;
@@ -85,7 +90,7 @@
 
 -(void)displayNextCMSampleBuffer:(NSTimer *)timer;
 
-
+-(void)stopVideo;
 
 /* Seek to closest keyframe near specified time */
 -(void)seekTime:(double)seconds;

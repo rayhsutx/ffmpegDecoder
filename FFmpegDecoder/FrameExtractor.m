@@ -12,7 +12,7 @@
 
 -(void)convertFrameToRGB;
 -(UIImage *)imageFromAVPicture:(AVPicture)pict width:(int)width height:(int)height;
--(void)savePicture:(AVPicture)pFrame width:(int)width height:(int)height index:(int)iFrame;
+//-(void)savePicture:(AVPicture)pFrame width:(int)width height:(int)height index:(int)iFrame;
 - (CVPixelBufferRef) pixelBufferFromCGImage: (CGImageRef) image size:(CGSize) size;
 -(CGImageRef)CGImageRefFromAVPicture:(AVPicture)pict width:(int)width height:(int)height;
 -(CMSampleBufferRef)  cmSampleBufferFromCGImage: (CGImageRef) image size:(CGSize) size;
@@ -24,10 +24,12 @@
 @implementation FrameExtractor
 AVFormatContext *pFormatCtx;
 AVCodecContext *pCodecCtx;
-AVFrame *pFrame; 
+AVFrame *pFrame;
 AVPicture picture;
 int videoStream;
 struct SwsContext *img_convert_ctx;
+
+BOOL pictureAllocated;
 
 @synthesize outputWidth, outputHeight;
 @synthesize cgimageDelegate;
@@ -84,6 +86,7 @@ struct SwsContext *img_convert_ctx;
 }
 
 -(id)initWithVideo:(NSString *)moviePath {
+    disposed = YES;
 	if (!(self=[super init])) return nil;
     
     AVCodec         *pCodec;
@@ -94,12 +97,7 @@ struct SwsContext *img_convert_ctx;
         
 	
     // Open video file
-       
-
-    
-  //  if(av_open_input_file(&pFormatCtx, "rtsp://a2047.v1412b.c1412.g.vq.akamaistream.net/5/2047/1412/1_h264_350/1a1a1ae555c531960166d//f4dbc3095c327960d7be756b71b49aa1576e344addb3ead1a497aaedf11/8848125_1_350.mov", NULL, 0, NULL)!=0)
-       // goto initError; // Couldn't open file
-    
+    // goto initError; // Couldn't open file
     if(av_open_input_file(&pFormatCtx, [moviePath UTF8String], NULL, 0, NULL)!=0)
         goto initError; // Couldn't open file
 
@@ -137,6 +135,8 @@ struct SwsContext *img_convert_ctx;
 	outputWidth = pCodecCtx->width;
 	self.outputHeight = pCodecCtx->height;
     
+    disposed = NO;
+    
 	return self;
 	
 initError:
@@ -149,8 +149,11 @@ initError:
 -(void)setupScaler {
     
 	// Release old picture and scaler
-	avpicture_free(&picture);
-	sws_freeContext(img_convert_ctx);	
+    if (pictureAllocated)
+    {
+        avpicture_free(&picture);
+        sws_freeContext(img_convert_ctx);
+    }
 	
 	// Allocate RGB picture
 	avpicture_alloc(&picture, PIX_FMT_RGB24, outputWidth, outputHeight);
@@ -165,6 +168,7 @@ initError:
 									 PIX_FMT_RGB24,
 									 sws_flags, NULL, NULL, NULL);
 	
+    pictureAllocated = YES;
 }
 
 -(void)seekTime:(double)seconds {
@@ -175,20 +179,8 @@ initError:
 }
 
 -(void)dealloc {
-	// Free scaler
-	sws_freeContext(img_convert_ctx);	
-    
-	// Free RGB picture
-	avpicture_free(&picture);
 	
-    // Free the YUV frame
-    av_free(pFrame);
-	
-    // Close the codec
-    if (pCodecCtx) avcodec_close(pCodecCtx);
-	
-    // Close the video file
-    if (pFormatCtx) av_close_input_file(pFormatCtx);
+    [self stopVideo];
 	
 	[super dealloc];
 }
@@ -197,7 +189,7 @@ initError:
 	AVPacket packet;
     int frameFinished=0;
     
-    while(!frameFinished && av_read_frame(pFormatCtx, &packet)>=0) {
+    while(!disposed && !frameFinished && av_read_frame(pFormatCtx, &packet)>=0) {
         // Is this a packet from the video stream?
         if(packet.stream_index==videoStream) {
             // Decode video frame
@@ -337,8 +329,10 @@ initError:
 	
 	// seek to 0.0 seconds
 	[self seekTime:0.0];
-    NSLog(@"setting timer");
-	[NSTimer scheduledTimerWithTimeInterval:kPollingInterval 
+    if (cgTimer)
+        [cgTimer invalidate];
+
+	cgTimer = [NSTimer scheduledTimerWithTimeInterval:kPollingInterval
 									 target:self
 								   selector:@selector(displayNextImageBuffer:)
 								   userInfo:nil
@@ -355,7 +349,10 @@ initError:
 	// seek to 0.0 seconds
 	[self seekTime:0.0];
     
-	[NSTimer scheduledTimerWithTimeInterval:kPollingInterval 
+    if (pvTimer)
+        [pvTimer invalidate];
+    
+	pvTimer = [NSTimer scheduledTimerWithTimeInterval:kPollingInterval
 									 target:self
 								   selector:@selector(displayNextPVBuffer:)
 								   userInfo:nil
@@ -371,8 +368,10 @@ initError:
 	
 	// seek to 0.0 seconds
 	[self seekTime:0.0];
+    if (cmTimer)
+        [cmTimer invalidate];
     
-	[NSTimer scheduledTimerWithTimeInterval:kPollingInterval 
+	cmTimer = [NSTimer scheduledTimerWithTimeInterval:kPollingInterval
 									 target:self
 								   selector:@selector(displayNextCMSampleBuffer:)
 								   userInfo:nil
@@ -384,7 +383,44 @@ initError:
 }
 
 
-
+-(void)stopVideo
+{
+    if (cgTimer)
+    {
+        [cgTimer invalidate];
+        cgTimer = nil;
+    }
+    if (pvTimer)
+    {
+        [pvTimer invalidate];
+        pvTimer = nil;
+    }
+    if (cmTimer)
+    {
+        [cmTimer invalidate];
+        cmTimer = nil;
+    }
+    
+    if (!disposed)
+    {
+        // Free scaler
+        sws_freeContext(img_convert_ctx);
+        
+        // Free RGB picture
+        avpicture_free(&picture);
+        pictureAllocated = NO;
+        
+        // Free the YUV frame
+        av_free(pFrame);
+        
+        // Close the codec
+        if (pCodecCtx) avcodec_close(pCodecCtx);
+        
+        // Close the video file
+        if (pFormatCtx) av_close_input_file(pFormatCtx);
+        disposed = YES;
+    }
+}
 
 
 

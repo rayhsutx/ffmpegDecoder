@@ -180,9 +180,6 @@
 				30F5E0E915620217005D3578 /* libavutil */,
 				30F5E11015620217005D3578 /* libswscale */,
 				30F5E0D9156201EB005D3578 /* libavcodec */,
-				30FB0CEE155090A400839DAB /* CoreVideo.framework */,
-				30FB0CEC1550909100839DAB /* CoreMedia.framework */,
-				30FB0CEA1550903D00839DAB /* QuartzCore.framework */,
 				30D1F35F154DB5BF000D029A /* libavcodec.a */,
 				30D1F360154DB5BF000D029A /* libavdevice.a */,
 				30D1F361154DB5BF000D029A /* libavfilter.a */,
@@ -206,6 +203,9 @@
 		30C46B26154DA8C3003E6ACF /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				30FB0CEE155090A400839DAB /* CoreVideo.framework */,
+				30FB0CEC1550909100839DAB /* CoreMedia.framework */,
+				30FB0CEA1550903D00839DAB /* QuartzCore.framework */,
 				30FB0CE515508FB200839DAB /* CoreImage.framework */,
 				306AD4AB154F52E300C375FA /* AVFoundation.framework */,
 				30C46B27154DA8C3003E6ACF /* Foundation.framework */,
